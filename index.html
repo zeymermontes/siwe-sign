@@ -20,21 +20,21 @@
   }
   .hidden { display: none; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@metamask/sdk/dist/browser/iife/metamask-sdk.js"></script>
 </head>
 <body>
   <h1>Sign-In With Ethereum</h1>
   <p id="status">Preparing…</p>
-  <button id="sign" class="hidden">Sign in with Ethereum</button>
-  <button id="return" class="hidden">Return to the app</button>
+  <button id="sign" class="hidden">Sign in with MetaMask</button>
 
 <script>
-  // Deep link back into the Flutter app (see its AndroidManifest / Info.plist).
-  const REDIRECT = 'siweapp://callback';
   const APP_NAME = 'SIWE Demo';
+  // Deep-link fallback used only when the page runs inside MetaMask's own
+  // browser (no SiweBridge JavaScript channel available).
+  const REDIRECT = 'siweapp://callback';
 
   const statusEl = document.getElementById('status');
   const signBtn = document.getElementById('sign');
-  const returnBtn = document.getElementById('return');
 
   function status(text) { statusEl.textContent = text; }
 
@@ -50,18 +50,41 @@
       .map(b => chars[b % chars.length]).join('');
   }
 
-  function goBack(target) {
-    // Custom-scheme navigation can be blocked without a user gesture,
-    // so always offer a button as fallback.
-    returnBtn.classList.remove('hidden');
-    returnBtn.onclick = () => { location.href = target; };
-    location.href = target;
+  // Hands the result to the Flutter app: preferably via the WebView's
+  // JavaScript channel, otherwise via the return deep link.
+  function report(payload) {
+    if (window.SiweBridge) {
+      SiweBridge.postMessage(JSON.stringify(payload));
+    } else {
+      const params = new URLSearchParams(payload).toString();
+      location.href = `${REDIRECT}?${params}`;
+    }
+  }
+
+  let sdk = null;
+
+  async function getProvider() {
+    if (window.ethereum) return window.ethereum; // MetaMask in-app browser.
+    status('Loading MetaMask SDK…');
+    if (!window.MetaMaskSDK) {
+      throw new Error('MetaMask SDK failed to load. Check your connection.');
+    }
+    if (!sdk) {
+      sdk = new MetaMaskSDK.MetaMaskSDK({
+        dappMetadata: { name: APP_NAME, url: location.origin },
+        checkInstallationImmediately: false,
+      });
+      await sdk.init();
+    }
+    return sdk.getProvider();
   }
 
   async function signIn() {
     signBtn.classList.add('hidden');
     try {
-      status('Connecting to your wallet…');
+      const ethereum = await getProvider();
+
+      status('Connect and sign in MetaMask…');
       const [address] =
         await ethereum.request({ method: 'eth_requestAccounts' });
       const chainId =
@@ -85,7 +108,7 @@
       });
 
       status('Signed! Returning to the app…');
-      goBack(`${REDIRECT}?address=${address}&signature=${signature}`);
+      report({ address, signature });
     } catch (err) {
       if (err && err.code === 4001) {
         status('You rejected the request.');
@@ -99,11 +122,14 @@
 
   signBtn.onclick = signIn;
 
-  if (!window.ethereum) {
-    status('No wallet found. Open this page inside the MetaMask app browser ' +
-           '(start from the SIWE Demo app).');
-  } else {
+  if (window.ethereum) {
+    // Inside MetaMask's browser the prompts appear in place — start at once.
     signIn();
+  } else {
+    // Inside the app's WebView, signing jumps out to the MetaMask app;
+    // require a tap so the user initiates it.
+    status('Sign the SIWE message with the MetaMask app.');
+    signBtn.classList.remove('hidden');
   }
 </script>
 </body>
