@@ -20,7 +20,9 @@
   }
   .hidden { display: none; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@metamask/sdk/dist/browser/iife/metamask-sdk.js"></script>
+<!-- Only needed OUTSIDE MetaMask's browser (no injected provider there).
+     `defer` keeps this big bundle from blocking the page render. -->
+<script defer src="https://cdn.jsdelivr.net/npm/@metamask/sdk/dist/browser/iife/metamask-sdk.js"></script>
 </head>
 <body>
   <h1>Sign-In With Ethereum</h1>
@@ -74,6 +76,10 @@
   async function getProvider() {
     if (window.ethereum) return window.ethereum; // MetaMask in-app browser.
     status('Loading MetaMask SDK…');
+    // The SDK script is deferred; give it a moment to arrive.
+    for (let i = 0; i < 50 && !window.MetaMaskSDK; i++) {
+      await new Promise(r => setTimeout(r, 200));
+    }
     if (!window.MetaMaskSDK) {
       throw new Error('MetaMask SDK failed to load. Check your connection.');
     }
