@@ -73,6 +73,12 @@
       sdk = new MetaMaskSDK.MetaMaskSDK({
         dappMetadata: { name: APP_NAME, url: location.origin },
         checkInstallationImmediately: false,
+        // Use native metamask:// deep links instead of the
+        // https://metamask.app.link universal links: the universal links go
+        // through Branch/the system browser, which can drop the channel
+        // query params — MetaMask then opens without showing any request.
+        useDeeplink: true,
+        openDeeplink: (link) => { location.href = link; },
       });
       await sdk.init();
     }
