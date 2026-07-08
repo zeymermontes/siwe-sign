@@ -6,6 +6,10 @@
 <title>SIWE Demo — Sign in</title>
 <style>
   :root { color-scheme: light dark; }
+  body { background: #ffffff; color: #1a1a1a; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #17181c; color: #f2f2f2; }
+  }
   body {
     font-family: -apple-system, system-ui, sans-serif;
     display: flex; flex-direction: column; align-items: center;
@@ -73,8 +77,22 @@
 
   let sdk = null;
 
+  // MetaMask's in-app browser injects window.ethereum asynchronously —
+  // wait for it before concluding there is no injected provider.
+  function waitForInjected(ms) {
+    if (window.ethereum) return Promise.resolve(window.ethereum);
+    return new Promise(resolve => {
+      const timer = setTimeout(() => resolve(window.ethereum || null), ms);
+      window.addEventListener('ethereum#initialized', () => {
+        clearTimeout(timer);
+        resolve(window.ethereum || null);
+      }, { once: true });
+    });
+  }
+
   async function getProvider() {
-    if (window.ethereum) return window.ethereum; // MetaMask in-app browser.
+    const injected = await waitForInjected(3000);
+    if (injected) return injected; // MetaMask in-app browser.
     status('Loading MetaMask SDK…');
     // The SDK script is deferred; give it a moment to arrive.
     for (let i = 0; i < 50 && !window.MetaMaskSDK; i++) {
@@ -142,15 +160,17 @@
 
   signBtn.onclick = signIn;
 
-  if (window.ethereum) {
-    // Inside MetaMask's browser the prompts appear in place — start at once.
-    signIn();
-  } else {
-    // Inside the app's WebView, signing jumps out to the MetaMask app;
-    // require a tap so the user initiates it.
-    status('Sign the SIWE message with the MetaMask app.');
-    signBtn.classList.remove('hidden');
-  }
+  waitForInjected(1500).then(injected => {
+    if (injected) {
+      // Inside MetaMask's browser the prompts appear in place — start at once.
+      signIn();
+    } else {
+      // No injected provider: signing will jump out to the MetaMask app via
+      // the SDK; require a tap so the user initiates it.
+      status('Sign the SIWE message with the MetaMask app.');
+      signBtn.classList.remove('hidden');
+    }
+  });
 </script>
 </body>
 </html>
