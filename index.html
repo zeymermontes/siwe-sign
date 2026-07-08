@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIWE Demo — Sign in</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; min-height: 100vh; margin: 0; padding: 24px;
+    box-sizing: border-box; text-align: center; gap: 16px;
+  }
+  h1 { font-size: 1.3rem; margin: 0; }
+  p  { margin: 0; opacity: .8; max-width: 32rem; overflow-wrap: anywhere; }
+  button {
+    font-size: 1rem; padding: 14px 28px; border: 0; border-radius: 10px;
+    background: #f6851b; color: #fff; font-weight: 600;
+  }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <h1>Sign-In With Ethereum</h1>
+  <p id="status">Preparing…</p>
+  <button id="sign" class="hidden">Sign in with Ethereum</button>
+  <button id="return" class="hidden">Return to the app</button>
+
+<script>
+  // Deep link back into the Flutter app (see its AndroidManifest / Info.plist).
+  const REDIRECT = 'siweapp://callback';
+  const APP_NAME = 'SIWE Demo';
+
+  const statusEl = document.getElementById('status');
+  const signBtn = document.getElementById('sign');
+  const returnBtn = document.getElementById('return');
+
+  function status(text) { statusEl.textContent = text; }
+
+  function toHex(str) {
+    return '0x' + Array.from(new TextEncoder().encode(str))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function randomNonce(length = 16) {
+    const chars =
+      'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return Array.from(crypto.getRandomValues(new Uint8Array(length)))
+      .map(b => chars[b % chars.length]).join('');
+  }
+
+  function goBack(target) {
+    // Custom-scheme navigation can be blocked without a user gesture,
+    // so always offer a button as fallback.
+    returnBtn.classList.remove('hidden');
+    returnBtn.onclick = () => { location.href = target; };
+    location.href = target;
+  }
+
+  async function signIn() {
+    signBtn.classList.add('hidden');
+    try {
+      status('Connecting to your wallet…');
+      const [address] =
+        await ethereum.request({ method: 'eth_requestAccounts' });
+      const chainId =
+        parseInt(await ethereum.request({ method: 'eth_chainId' }), 16);
+
+      // EIP-4361 message. Domain/URI are those of this hosted page.
+      const message =
+        `${location.host} wants you to sign in with your Ethereum account:\n` +
+        `${address}\n\n` +
+        `Sign in with Ethereum to the ${APP_NAME} app.\n\n` +
+        `URI: ${location.origin + location.pathname}\n` +
+        `Version: 1\n` +
+        `Chain ID: ${chainId}\n` +
+        `Nonce: ${randomNonce()}\n` +
+        `Issued At: ${new Date().toISOString()}`;
+
+      status('Confirm the signature in MetaMask…');
+      const signature = await ethereum.request({
+        method: 'personal_sign',
+        params: [toHex(message), address],
+      });
+
+      status('Signed! Returning to the app…');
+      goBack(`${REDIRECT}?address=${address}&signature=${signature}`);
+    } catch (err) {
+      if (err && err.code === 4001) {
+        status('You rejected the request.');
+      } else {
+        status('Error: ' + (err && err.message ? err.message : err));
+      }
+      signBtn.textContent = 'Try again';
+      signBtn.classList.remove('hidden');
+    }
+  }
+
+  signBtn.onclick = signIn;
+
+  if (!window.ethereum) {
+    status('No wallet found. Open this page inside the MetaMask app browser ' +
+           '(start from the SIWE Demo app).');
+  } else {
+    signIn();
+  }
+</script>
+</body>
+</html>
