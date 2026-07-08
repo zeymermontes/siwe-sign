@@ -26,6 +26,7 @@
   <h1>Sign-In With Ethereum</h1>
   <p id="status">Preparing…</p>
   <button id="sign" class="hidden">Sign in with MetaMask</button>
+  <button id="return" class="hidden">Return to the app</button>
 
 <script>
   const APP_NAME = 'SIWE Demo';
@@ -35,6 +36,7 @@
 
   const statusEl = document.getElementById('status');
   const signBtn = document.getElementById('sign');
+  const returnBtn = document.getElementById('return');
 
   function status(text) { statusEl.textContent = text; }
 
@@ -55,10 +57,16 @@
   function report(payload) {
     if (window.SiweBridge) {
       SiweBridge.postMessage(JSON.stringify(payload));
-    } else {
-      const params = new URLSearchParams(payload).toString();
-      location.href = `${REDIRECT}?${params}`;
+      return;
     }
+    const params = new URLSearchParams(payload).toString();
+    const target = `${REDIRECT}?${params}`;
+    // Browsers block custom-scheme navigation that isn't user-initiated
+    // (MetaMask shows "this site was blocked from automatically opening an
+    // external application"), so always offer a tap-to-return button too.
+    returnBtn.classList.remove('hidden');
+    returnBtn.onclick = () => { location.href = target; };
+    location.href = target;
   }
 
   let sdk = null;
