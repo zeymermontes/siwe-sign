@@ -1,176 +1,192 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SIWE Demo — Sign in</title>
+<title>Iniciar sesión — Moca Business</title>
 <style>
   :root { color-scheme: light dark; }
-  body { background: #ffffff; color: #1a1a1a; }
-  @media (prefers-color-scheme: dark) {
-    body { background: #17181c; color: #f2f2f2; }
-  }
+  * { box-sizing: border-box; }
   body {
     font-family: -apple-system, system-ui, sans-serif;
+    margin: 0; padding: 24px; min-height: 100vh;
+    background: #17181c; color: #f2f2f2;
     display: flex; flex-direction: column; align-items: center;
-    justify-content: center; min-height: 100vh; margin: 0; padding: 24px;
-    box-sizing: border-box; text-align: center; gap: 16px;
   }
-  h1 { font-size: 1.3rem; margin: 0; }
-  p  { margin: 0; opacity: .8; max-width: 32rem; overflow-wrap: anywhere; }
-  button {
-    font-size: 1rem; padding: 14px 28px; border: 0; border-radius: 10px;
-    background: #f6851b; color: #fff; font-weight: 600;
-  }
-  .hidden { display: none; }
+  h1 { font-size: 1.4rem; margin: 8px 0 4px; text-align: center; }
+  .sub { color: #a8a8b3; font-size: .9rem; text-align: center; margin-bottom: 18px; }
+  .card { width: 100%; max-width: 460px; }
+  .banner { border: 1px solid #f6851b80; border-radius: 12px; padding: 12px 14px;
+            font-size: .82rem; color: #c9c9d1; margin-bottom: 8px; }
+  .label { color: #6f7080; font-size: .72rem; letter-spacing: 1px;
+           font-weight: 600; margin: 20px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .tile { background: #222329; border: 0; border-radius: 16px; padding: 12px 6px;
+          color: #e8e8ee; cursor: pointer; display: flex; flex-direction: column;
+          align-items: center; gap: 8px; font-size: .74rem; }
+  .tile:disabled { opacity: .4; }
+  .tile img { width: 44px; height: 44px; border-radius: 12px; }
+  .status { margin-top: 20px; text-align: center; font-size: .95rem;
+            color: #a8a8b3; overflow-wrap: anywhere; }
+  .ok { color: #34c759; font-weight: 600; font-size: 1.15rem; }
+  .sim { margin-top: 22px; }
+  .sim button { width: 100%; background: transparent; color: #6f7080;
+                border: 1px dashed #33343c; border-radius: 10px; padding: 10px;
+                font-size: .8rem; cursor: pointer; margin-top: 6px; }
 </style>
-<!-- Only needed OUTSIDE MetaMask's browser (no injected provider there).
-     `defer` keeps this big bundle from blocking the page render. -->
-<script defer src="https://cdn.jsdelivr.net/npm/@metamask/sdk/dist/browser/iife/metamask-sdk.js"></script>
 </head>
 <body>
-  <h1>Sign-In With Ethereum</h1>
-  <p id="status">Preparing…</p>
-  <button id="sign" class="hidden">Sign in with MetaMask</button>
-  <button id="return" class="hidden">Return to the app</button>
+  <h1>Iniciar sesión</h1>
+  <div class="sub">Moca Business · secure channel demo</div>
+  <div class="card" id="card"></div>
+  <div class="status" id="status"></div>
 
 <script>
-  const APP_NAME = 'SIWE Demo';
-  // Deep-link fallback used only when the page runs inside MetaMask's own
-  // browser (no SiweBridge JavaScript channel available).
-  const REDIRECT = 'siweapp://callback';
+  const params = new URLSearchParams(location.search);
+  const channel = params.get('channel');
+  const chainParam = params.get('chain'); // set when reopened in a wallet browser
+  const RELAY = 'https://ntfy.sh';
+  const DOMAIN = 'business.moca.app';
+  const URI = 'https://business.moca.app';
+  const STATEMENT = 'Sign in to Moca Business';
 
+  const IMG = id => `https://explorer-api.walletconnect.com/v3/logo/md/${id}?projectId=61bd88b09a96f54ca3f06f050549267e`;
+
+  // Wallet catalog. `dl` builds the deep link that reopens THIS page inside
+  // the wallet's own browser (where the wallet injects its provider).
+  const target = (chain) =>
+    location.origin + location.pathname + `?channel=${channel}&chain=${chain}`;
+  const WALLETS = {
+    metamask: { name: 'MetaMask', img: 'eebe4a7f-7166-402f-92e0-1f64ca2aa800',
+      dl: u => 'https://metamask.app.link/dapp/' + u.replace(/^https?:\/\//, '') },
+    rabby: { name: 'Rabby', img: '255e6ba2-8dfd-43ad-e88e-57cbb98f6800',
+      dl: u => 'rabby://open?url=' + encodeURIComponent(u) },
+    trust: { name: 'Trust', img: '7677b54f-3486-46e2-4e37-bf8747814f00',
+      dl: u => 'https://link.trustwallet.com/open_url?coin_id=60&url=' + encodeURIComponent(u) },
+    okx: { name: 'OKX', img: '45f2f08e-fc0c-4d62-3e63-404e72170500',
+      dl: u => 'okx://wallet/dapp/url?dappUrl=' + encodeURIComponent(u) },
+    phantom: { name: 'Phantom', img: 'b6ec7b81-bb4f-427d-e290-7631e6e50d00',
+      dl: u => 'https://phantom.app/ul/browse/' + encodeURIComponent(u) + '?ref=' + encodeURIComponent(location.origin) },
+    backpack: { name: 'Backpack', img: '71ca9daf-a31e-4d2a-fd01-f5dc2dc66900',
+      dl: u => 'https://backpack.app/ul/v1/browse/' + encodeURIComponent(u) + '?ref=' + encodeURIComponent(location.origin) },
+    vultisig: { name: 'Vultisig', img: null, dl: null }, // no in-app browser
+  };
+  const EVM = ['rabby', 'phantom', 'trust', 'vultisig', 'okx', 'metamask', 'backpack'];
+  const SOL = ['phantom', 'okx', 'trust', 'backpack'];
+
+  const cardEl = document.getElementById('card');
   const statusEl = document.getElementById('status');
-  const signBtn = document.getElementById('sign');
-  const returnBtn = document.getElementById('return');
+  function status(t, cls) { statusEl.innerHTML = cls ? `<div class="${cls}">${t}</div>` : t; }
 
-  function status(text) { statusEl.textContent = text; }
-
+  function nonce(n = 16) {
+    const c = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return Array.from(crypto.getRandomValues(new Uint8Array(n))).map(b => c[b % c.length]).join('');
+  }
   function toHex(str) {
-    return '0x' + Array.from(new TextEncoder().encode(str))
-      .map(b => b.toString(16).padStart(2, '0')).join('');
+    return '0x' + Array.from(new TextEncoder().encode(str)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  function b64url(bytes) {
+    return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function siwe(address, chainId) {
+    return `${DOMAIN} wants you to sign in with your Ethereum account:\n${address}\n\n${STATEMENT}\n\n` +
+      `URI: ${URI}\nVersion: 1\nChain ID: ${chainId}\nNonce: ${nonce()}\nIssued At: ${new Date().toISOString()}`;
+  }
+  function siws(address) {
+    return `${DOMAIN} wants you to sign in with your Solana account:\n${address}\n\n${STATEMENT}\n\n` +
+      `Version: 1\nURI: ${URI}\nIssued At: ${new Date().toISOString()}`;
   }
 
-  function randomNonce(length = 16) {
-    const chars =
-      'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    return Array.from(crypto.getRandomValues(new Uint8Array(length)))
-      .map(b => chars[b % chars.length]).join('');
+  async function publish(payload) {
+    if (!channel) throw new Error('Falta ?channel');
+    const r = await fetch(`${RELAY}/${channel}`, { method: 'POST', body: JSON.stringify(payload) });
+    if (!r.ok) throw new Error('El canal rechazó el mensaje (' + r.status + ')');
+  }
+  async function send(payload) {
+    status('Enviando al canal…');
+    await publish(payload);
+    cardEl.style.display = 'none';
+    status('✓ Firma enviada al canal', 'ok');
+    statusEl.innerHTML += '<div>Vuelve a la app.</div>';
+  }
+  function showErr(e) {
+    status(e && e.code === 4001 ? 'Rechazaste la firma.' : 'Error: ' + (e && e.message ? e.message : e));
   }
 
-  // Hands the result to the Flutter app: preferably via the WebView's
-  // JavaScript channel, otherwise via the return deep link.
-  function report(payload) {
-    if (window.SiweBridge) {
-      SiweBridge.postMessage(JSON.stringify(payload));
-      return;
-    }
-    const params = new URLSearchParams(payload).toString();
-    const target = `${REDIRECT}?${params}`;
-    // Browsers block custom-scheme navigation that isn't user-initiated
-    // (MetaMask shows "this site was blocked from automatically opening an
-    // external application"), so always offer a tap-to-return button too.
-    returnBtn.classList.remove('hidden');
-    returnBtn.onclick = () => { location.href = target; };
-    location.href = target;
+  // ── Signing with the injected provider (inside the wallet browser) ──
+  async function signEvm() {
+    if (!window.ethereum) throw new Error('No hay provider Ethereum inyectado.');
+    status('Firmando en la wallet…');
+    const [address] = await ethereum.request({ method: 'eth_requestAccounts' });
+    const chainId = parseInt(await ethereum.request({ method: 'eth_chainId' }), 16);
+    const message = siwe(address, chainId);
+    const signature = await ethereum.request({ method: 'personal_sign', params: [toHex(message), address] });
+    await send({ chain: 'ethereum', address, signature, message });
+  }
+  function solProvider() {
+    return window.phantom?.solana || window.backpack || window.solana || null;
+  }
+  async function signSol() {
+    const sol = solProvider();
+    if (!sol) throw new Error('No hay provider Solana inyectado.');
+    status('Firmando en la wallet…');
+    await sol.connect();
+    const address = sol.publicKey.toString();
+    const message = siws(address);
+    const enc = new TextEncoder().encode(message);
+    const res = await sol.signMessage(enc, 'utf8');
+    const sig = res.signature || res; // Uint8Array
+    await send({ chain: 'solana', address, signature: b64url(sig), message });
   }
 
-  let sdk = null;
+  // ── Wallet picker (plain browser): deep-link into each wallet browser ──
+  function tile(key, chain) {
+    const w = WALLETS[key];
+    const b = document.createElement('button');
+    b.className = 'tile';
+    b.innerHTML = (w.img ? `<img src="${IMG(w.img)}" alt="">`
+      : `<div style="width:44px;height:44px;border-radius:12px;background:#33343c;display:flex;align-items:center;justify-content:center;font-weight:700">${w.name[0]}</div>`)
+      + `<span>${w.name}</span>`;
+    if (!w.dl) { b.disabled = true; b.title = 'No disponible'; return b; }
+    b.onclick = () => {
+      status(`Abriendo ${w.name}…`);
+      location.href = w.dl(target(chain));
+    };
+    return b;
+  }
+  function section(title, keys, chain) {
+    const l = document.createElement('div'); l.className = 'label'; l.textContent = title;
+    const g = document.createElement('div'); g.className = 'grid';
+    keys.forEach(k => g.appendChild(tile(k, chain)));
+    cardEl.appendChild(l); cardEl.appendChild(g);
+  }
+  function showPicker() {
+    const banner = document.createElement('div');
+    banner.className = 'banner';
+    banner.innerHTML = 'Tu wallet externa se usa <b>solo para iniciar sesión</b>. ' +
+      'Elige una wallet; se abrirá para firmar y el resultado vuelve a la app por el canal.';
+    cardEl.appendChild(banner);
+    section('WALLETS DE ETHEREUM', EVM, 'eip155');
+    section('WALLETS DE SOLANA', SOL, 'solana');
 
-  // MetaMask's in-app browser injects window.ethereum asynchronously —
-  // wait for it before concluding there is no injected provider.
-  function waitForInjected(ms) {
-    if (window.ethereum) return Promise.resolve(window.ethereum);
-    return new Promise(resolve => {
-      const timer = setTimeout(() => resolve(window.ethereum || null), ms);
-      window.addEventListener('ethereum#initialized', () => {
-        clearTimeout(timer);
-        resolve(window.ethereum || null);
-      }, { once: true });
-    });
+    // Demo fallback so the channel loop is testable without a wallet.
+    const sim = document.createElement('div'); sim.className = 'sim';
+    const be = document.createElement('button');
+    be.textContent = 'Simular firma (demo, sin wallet)';
+    be.onclick = () => {
+      const a = '0x' + Array.from(crypto.getRandomValues(new Uint8Array(20))).map(b => b.toString(16).padStart(2, '0')).join('');
+      send({ chain: 'ethereum', address: a, signature: '0x' + nonce(130), message: siwe(a, 1), demo: true }).catch(showErr);
+    };
+    sim.appendChild(be); cardEl.appendChild(sim);
+    status(channel ? 'Canal: ' + channel.slice(0, 16) + '…' : 'Falta ?channel');
   }
 
-  async function getProvider() {
-    const injected = await waitForInjected(3000);
-    if (injected) return injected; // MetaMask in-app browser.
-    status('Loading MetaMask SDK…');
-    // The SDK script is deferred; give it a moment to arrive.
-    for (let i = 0; i < 50 && !window.MetaMaskSDK; i++) {
-      await new Promise(r => setTimeout(r, 200));
-    }
-    if (!window.MetaMaskSDK) {
-      throw new Error('MetaMask SDK failed to load. Check your connection.');
-    }
-    if (!sdk) {
-      sdk = new MetaMaskSDK.MetaMaskSDK({
-        dappMetadata: { name: APP_NAME, url: location.origin },
-        checkInstallationImmediately: false,
-        // Use native metamask:// deep links instead of the
-        // https://metamask.app.link universal links: the universal links go
-        // through Branch/the system browser, which can drop the channel
-        // query params — MetaMask then opens without showing any request.
-        useDeeplink: true,
-        openDeeplink: (link) => { location.href = link; },
-      });
-      await sdk.init();
-    }
-    return sdk.getProvider();
-  }
-
-  async function signIn() {
-    signBtn.classList.add('hidden');
-    try {
-      const ethereum = await getProvider();
-
-      status('Connect and sign in MetaMask…');
-      const [address] =
-        await ethereum.request({ method: 'eth_requestAccounts' });
-      const chainId =
-        parseInt(await ethereum.request({ method: 'eth_chainId' }), 16);
-
-      // EIP-4361 message. Domain/URI are those of this hosted page.
-      const message =
-        `${location.host} wants you to sign in with your Ethereum account:\n` +
-        `${address}\n\n` +
-        `Sign in with Ethereum to the ${APP_NAME} app.\n\n` +
-        `URI: ${location.origin + location.pathname}\n` +
-        `Version: 1\n` +
-        `Chain ID: ${chainId}\n` +
-        `Nonce: ${randomNonce()}\n` +
-        `Issued At: ${new Date().toISOString()}`;
-
-      status('Confirm the signature in MetaMask…');
-      const signature = await ethereum.request({
-        method: 'personal_sign',
-        params: [toHex(message), address],
-      });
-
-      status('Signed! Returning to the app…');
-      report({ address, signature });
-    } catch (err) {
-      if (err && err.code === 4001) {
-        status('You rejected the request.');
-      } else {
-        status('Error: ' + (err && err.message ? err.message : err));
-      }
-      signBtn.textContent = 'Try again';
-      signBtn.classList.remove('hidden');
-    }
-  }
-
-  signBtn.onclick = signIn;
-
-  waitForInjected(1500).then(injected => {
-    if (injected) {
-      // Inside MetaMask's browser the prompts appear in place — start at once.
-      signIn();
-    } else {
-      // No injected provider: signing will jump out to the MetaMask app via
-      // the SDK; require a tap so the user initiates it.
-      status('Sign the SIWE message with the MetaMask app.');
-      signBtn.classList.remove('hidden');
-    }
-  });
+  // Entry: if reopened inside a wallet browser with an injected provider and a
+  // known chain, sign straight away; otherwise show the wallet picker.
+  if (!channel) { status('Falta ?channel — abre esta página desde la app.'); }
+  else if (chainParam === 'eip155' && window.ethereum) { signEvm().catch(showErr); }
+  else if (chainParam === 'solana' && solProvider()) { signSol().catch(showErr); }
+  else { showPicker(); }
 </script>
 </body>
 </html>
